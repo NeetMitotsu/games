@@ -5,6 +5,9 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.ListIterator;
 
 /**
  * @Author 李新栋 [lxd3808@163.com]
@@ -17,12 +20,14 @@ public class TankClient extends JFrame {
     public static final int GAME_WIDTH = 640;
     public static final int GAME_HEIGHT = 480;
 
+    private List<Tank> tanks = new ArrayList<>();
+
     /**
      * 双缓存
      */
     Image offScreenImage = null;
 
-    public void init() {
+    public void init(TankClient tankClient) {
         this.setTitle("Tank War v1.0");
         this.setLocation(500, 500);
         this.setSize(GAME_WIDTH, GAME_HEIGHT);
@@ -32,6 +37,14 @@ public class TankClient extends JFrame {
         this.addKeyListener(new KeyAdapter() {
             @Override
             public void keyPressed(KeyEvent e) {
+                if (e.getKeyCode() == KeyEvent.VK_F2){
+                    myTank = new Tank(10, 90, true, tankClient);
+                    return;
+                }
+                if (e.getKeyCode() == KeyEvent.VK_F3){
+                    tankClient.getTanks().add(Tank.newEnemy(tankClient));
+                    return;
+                }
                 myTank.keyPressed(e);
             }
 
@@ -40,12 +53,13 @@ public class TankClient extends JFrame {
                 myTank.keyReleased(e);
             }
         });
+        for (int i = 0; i < 10; i++){
+            tanks.add(Tank.newEnemy(this));
+        }
         new Thread(new PaintThread()).start();
     }
 
     Tank myTank = new Tank(50, 50, true, this);
-
-    Tank enemyTank = new Tank(200, 200, false, this);
 
     @Override
     public void paint(Graphics g) {
@@ -56,7 +70,18 @@ public class TankClient extends JFrame {
         /* 画自己的坦克 */
         myTank.draw(g);
         /* 敌人坦克 */
-        enemyTank.draw(g);
+        final ListIterator<Tank> enemyIt = tanks.listIterator();
+        while (enemyIt.hasNext()){
+
+            final Tank next = enemyIt.next();
+            if (next.isWaitDel()){
+                enemyIt.remove();
+            }
+            next.draw(g);
+        }
+        /* 分数榜 */
+        g.setColor(Color.BLACK);
+        g.drawString("Tanks count: " + tanks.size(), 10, 90);
         g.setColor(c);
     }
 
@@ -70,10 +95,19 @@ public class TankClient extends JFrame {
         g.drawImage(offScreenImage, 0, 0, null);
     }
 
+    public List<Tank> getTanks() {
+        return tanks;
+    }
+
+    public void setTanks(List<Tank> tanks) {
+        this.tanks = tanks;
+    }
+
     public static void main(String[] args) {
         TankClient tankClient = new TankClient();
-        tankClient.init();
+        tankClient.init(tankClient);
     }
+
 
     private class PaintThread implements Runnable {
 
@@ -81,7 +115,8 @@ public class TankClient extends JFrame {
             while (true) {
                 repaint();
                 try {
-                    Thread.sleep(1000 / 50);
+                    Thread.sleep(1000 / 20);
+//                    Thread.sleep(60);
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }

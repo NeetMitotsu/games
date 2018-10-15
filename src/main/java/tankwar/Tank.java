@@ -2,11 +2,8 @@ package tankwar;
 
 import java.awt.*;
 import java.awt.event.KeyEvent;
-import java.awt.geom.Rectangle2D;
-import java.util.ArrayList;
-import java.util.LinkedList;
+import java.util.*;
 import java.util.List;
-import java.util.ListIterator;
 
 /**
  * @Author 李新栋 [lxd3808@163.com]
@@ -15,6 +12,8 @@ import java.util.ListIterator;
 public class Tank {
     private static final int X_SPEED = 5;
     private static final int Y_SPEED = 5;
+
+    private static final Random random = new Random();
 
     TankClient tankClient;
     /**
@@ -41,12 +40,18 @@ public class Tank {
      */
     private boolean player = false;
 
+    private int enemyStep = 3;
+
     /**
      * 坦克是否被打
      */
     private boolean live = true;
 
+    private boolean waitDel = false;
+
     private List<Missile> missileList = new LinkedList<>();
+
+    private Explode explode;
 
     public Tank(int x, int y, boolean player) {
         this.x = x;
@@ -60,15 +65,28 @@ public class Tank {
         this.tankClient = tankClient;
     }
 
+    public static Tank newEnemy(TankClient tankClient) {
+        final Tank tank = new Tank(random.nextInt(TankClient.GAME_WIDTH), random.nextInt(TankClient.GAME_HEIGHT), false, tankClient);
+        tank.setDir(Direction.values()[random.nextInt(Direction.values().length)]);
+        return tank;
+    }
+
 
     public void draw(Graphics graphics) {
-        if (!isLive()){
+        if (explode != null) {
+            explode.draw(graphics);
+        }
+        if (!isLive()) {
+            if(!player && !explode.isLive()){
+//                tankClient.getTanks().remove(this);
+                setWaitDel(true);
+            }
             return;
         }
         Color c = graphics.getColor();
-        if (player){
+        if (player) {
             graphics.setColor(Color.RED);
-        }else {
+        } else {
             graphics.setColor(Color.LIGHT_GRAY);
         }
         graphics.fillOval(x, y, size, size);
@@ -77,12 +95,13 @@ public class Tank {
         drawBarrel(graphics);
         move();
         final ListIterator<Missile> missileListIterator = missileList.listIterator();
-        while (missileListIterator.hasNext()){
+        while (missileListIterator.hasNext()) {
             Missile missile = missileListIterator.next();
-            missile.hitTank(tankClient.enemyTank);
-            if (missile.isLive()){
+            missile.hitTanks(tankClient.getTanks());
+            missile.hitTank(tankClient.myTank);
+            if (missile.isLive()) {
                 missile.draw(graphics);
-            }else {
+            } else {
                 missileListIterator.remove();
             }
         }
@@ -95,10 +114,10 @@ public class Tank {
                 graphics.drawLine(x + size / 2, y + size / 2, x + size / 2, y);
                 break;
             case LEFT_UP:
-                graphics.drawLine(x + size / 2, y + size / 2, (int)(x + (size / 2 - size / 2 * Math.cos(Math.PI / 4))), (int)(y+ (size / 2 - size / 2 * Math.cos(Math.PI / 4))));
+                graphics.drawLine(x + size / 2, y + size / 2, (int) (x + (size / 2 - size / 2 * Math.cos(Math.PI / 4))), (int) (y + (size / 2 - size / 2 * Math.cos(Math.PI / 4))));
                 break;
             case RIGHT_UP:
-                graphics.drawLine(x + size / 2, y + size / 2, (int)(x + (size / 2 + size / 2 * Math.cos(Math.PI / 4))), (int)(y+ (size / 2 - size / 2 * Math.cos(Math.PI / 4))));
+                graphics.drawLine(x + size / 2, y + size / 2, (int) (x + (size / 2 + size / 2 * Math.cos(Math.PI / 4))), (int) (y + (size / 2 - size / 2 * Math.cos(Math.PI / 4))));
                 break;
             case LEFT:
                 graphics.drawLine(x + size / 2, y + size / 2, x, y + size / 2);
@@ -107,10 +126,10 @@ public class Tank {
                 graphics.drawLine(x + size / 2, y + size / 2, x + size, y + size / 2);
                 break;
             case LEFT_DOWN:
-                graphics.drawLine(x + size / 2, y + size / 2, (int)(x + (size / 2 - size / 2 * Math.cos(Math.PI / 4))), (int)(y+ (size / 2 + size / 2 * Math.cos(Math.PI / 4))));
+                graphics.drawLine(x + size / 2, y + size / 2, (int) (x + (size / 2 - size / 2 * Math.cos(Math.PI / 4))), (int) (y + (size / 2 + size / 2 * Math.cos(Math.PI / 4))));
                 break;
             case RIGHT_DOWN:
-                graphics.drawLine(x + size / 2, y + size / 2, (int)(x + (size / 2 + size / 2 * Math.cos(Math.PI / 4))), (int)(y+ (size / 2 + size / 2 * Math.cos(Math.PI / 4))));
+                graphics.drawLine(x + size / 2, y + size / 2, (int) (x + (size / 2 + size / 2 * Math.cos(Math.PI / 4))), (int) (y + (size / 2 + size / 2 * Math.cos(Math.PI / 4))));
                 break;
             case DOWN:
                 graphics.drawLine(x + size / 2, y + size / 2, x + size / 2, y + size);
@@ -119,7 +138,7 @@ public class Tank {
     }
 
     public Missile fire() {
-        Missile missile = new Missile(x + size / 2, y + size / 2, barrelDir);
+        Missile missile = new Missile(x + size / 2, y + size / 2, barrelDir, this.player);
         missileList.add(missile);
         return missile;
     }
@@ -128,6 +147,7 @@ public class Tank {
      * 判断当前方向
      */
     public void locateDirection() {
+        if (!player) return;
         if (!bU && !bD && !bL && !bR) {
             dir = Direction.STOP;
         } else if (bU && !bD && !bL && !bR) {
@@ -222,22 +242,30 @@ public class Tank {
             case STOP:
                 break;
         }
-        if (this.dir != Direction.STOP){
+        if (this.dir != Direction.STOP) {
             barrelDir = this.dir;
         }
-        if (this.x > TankClient.GAME_WIDTH){
+        if (this.x > TankClient.GAME_WIDTH) {
             x = 0;
-        }
-        else if(this.x < 0){
+        } else if (this.x < 0) {
             x = TankClient.GAME_WIDTH;
         }
-        if (this.y > TankClient.GAME_HEIGHT){
+        if (this.y > TankClient.GAME_HEIGHT) {
             y = 0;
-        }
-        else if(this.y < 0){
+        } else if (this.y < 0) {
             y = TankClient.GAME_HEIGHT;
         }
 
+        if (!player){
+            if (enemyStep <= 0){
+                enemyStep = random.nextInt();
+                dir = Direction.values()[random.nextInt(Direction.values().length)];
+            }
+            enemyStep--;
+            if (random.nextInt(100) > 95){
+                fire();
+            }
+        }
     }
 
     public int getX() {
@@ -274,6 +302,30 @@ public class Tank {
 
     public Rectangle getRect() {
         return new Rectangle(x, y, size, size);
+    }
+
+    public Direction getDir() {
+        return dir;
+    }
+
+    public void setDir(Direction dir) {
+        this.dir = dir;
+    }
+
+    public Explode getExplode() {
+        return explode;
+    }
+
+    public void setExplode(Explode explode) {
+        this.explode = explode;
+    }
+
+    public boolean isWaitDel() {
+        return waitDel;
+    }
+
+    public void setWaitDel(boolean waitDel) {
+        this.waitDel = waitDel;
     }
 
     enum Direction {

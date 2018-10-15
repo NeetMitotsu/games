@@ -1,6 +1,8 @@
 package tankwar;
 
 import java.awt.*;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * @Author 李新栋 [lxd3808@163.com]
@@ -26,13 +28,16 @@ public class Missile {
 
     private boolean live = true;
 
-    public Missile(int x, int y, Tank.Direction direction) {
+    private boolean player;
+
+    public Missile(int x, int y, Tank.Direction direction, boolean player) {
         this.x = x;
         this.y = y;
         this.direction = direction;
+        this.player = player;
     }
 
-    public void draw(Graphics graphics){
+    public void draw(Graphics graphics) {
         Color c = graphics.getColor();
         graphics.setColor(Color.BLACK);
         graphics.fillOval(x, y, size, size);
@@ -72,10 +77,30 @@ public class Missile {
                 y += speed;
                 break;
         }
-        if (x > TankClient.GAME_WIDTH || y > TankClient.GAME_HEIGHT){
+        if (x > TankClient.GAME_WIDTH || y > TankClient.GAME_HEIGHT) {
             live = false;
         }
+    }
 
+    public boolean hitTank(Tank tank) {
+        if (this.getRect().intersects(tank.getRect()) && tank.isLive() && this.player != tank.isPlayer()) {
+            this.setLive(false);
+            tank.setLive(false);
+            tank.setExplode(new Explode(x, y));
+            return true;
+        }
+        return false;
+    }
+
+    public boolean hitTanks(List<Tank> tankList) {
+        AtomicBoolean flag = new AtomicBoolean(false);
+        tankList.forEach(tank -> {
+            if (hitTank(tank)) {
+                flag.set(true);
+                return;
+            }
+        });
+        return flag.get();
     }
 
     public boolean isLive() {
@@ -86,20 +111,12 @@ public class Missile {
         this.live = live;
     }
 
-    public boolean hitTank(Tank tank){
-        if (this.getRect().intersects(tank.getRect()) && tank.isLive()){
-            this.setLive(false);
-            tank.setLive(false);
-            return true;
-        }
-        return false;
-    }
-
     /**
      * 获取外围方块
+     *
      * @return
      */
-    public Rectangle getRect(){
+    public Rectangle getRect() {
         return new Rectangle(x, y, size, size);
     }
 }
